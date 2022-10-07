@@ -1,5 +1,4 @@
-require('dotenv').config();
-const { application, json } = require('express');
+const config = require('dotenv').config();
 const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors');
@@ -11,7 +10,7 @@ app.use(cors());
 app.use(express.static('build'));
 app.use(express.json());
 
-morgan.token('postdata', (request, response) => {
+morgan.token('postdata', (request) => {
   return JSON.stringify(request.body);
 });
 
@@ -45,48 +44,36 @@ app.get('/api/persons/:id', (request, response, next) => {
 
 app.delete('/api/persons/:id', (request, response, next) => {
   Person.findByIdAndRemove(request.params.id)
-    .then(result => {
+    .then(() => {
       response.status(204).end();
     })
     .catch(error => next(error));
 });
 
-const errorMessage = (response, message) => {
-  return response.status(400).json({
-    error: message
-  });
-}
-
-app.post('/api/persons', (request, response) => {
+app.post('/api/persons', (request, response, next) => {
   const body = request.body;
-  
-  if(!body.name || !body.number) {
-    return errorMessage(response, 'name or number is missing');
-  }
 
   const person = new Person({
     name: body.name,
     number: body.number
   });
-        
-  person.save().then(result => {
-    response.json(result);
-  });
+
+  person.save()
+    .then(result => {
+      response.json(result);
+    })
+    .catch(error => next(error));
 });
 
 app.put('/api/persons/:id', (request, response, next) => {
   const body = request.body;
-  
-  if(!body.number) {
-    return errorMessage(response, 'name or number is missing');
-  }
 
   const person = {
     name: body.name,
     number: body.number
   };
 
-  Person.findByIdAndUpdate(request.params.id, person, { new: true })
+  Person.findByIdAndUpdate(request.params.id, person, { new: true, runValidators: true, context: 'query' })
     .then(result => {
       response.json(result);
     })
@@ -104,8 +91,10 @@ const errorHandler = (error, request, response, next) => {
   console.error(error.name)
 
   if (error.name === 'CastError') {
-    return response.status(400).send({ error: 'malformatted id' })
-  } 
+    return response.status(400).send({ error: 'malformatted id' });
+  } else if(error.name === 'ValidationError') {
+    return response.status(400).send({ error: error.message });
+  }
 
   next(error);
 }
@@ -113,7 +102,7 @@ const errorHandler = (error, request, response, next) => {
 // handler of requests with result to errors
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 3001;
+const PORT = config.env.PORT;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 });
